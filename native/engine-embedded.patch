@@ -1,0 +1,15 @@
+--- a/src/video/video_renderer.cpp
++++ b/src/video/video_renderer.cpp
+@@ -1049,1 +1049,1 @@
+-        SDL_SetWindowSize(window,defaults.ui.window_width,defaults.ui.window_height);
++        // AirMirror shell owns embedded child geometry.
+@@ -1087,1 +1087,1 @@
+-            SDL_SetWindowSize(window, snap_w, snap_h);
++            // AirMirror shell owns embedded child geometry.
+@@ -1115,1 +1115,1 @@
+-            SDL_SetWindowSize(window, new_w, new_h);
++            // AirMirror shell owns embedded child geometry.
+@@ -1152,2 +1152,1 @@
+-                SDL_SetWindowSize(window,
+-                                  saved_window_w, saved_window_h);
++                // AirMirror shell owns embedded child geometry.

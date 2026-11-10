@@ -1,0 +1,22 @@
+# Build output, downloaded tools and local verification data
+/work/
+/dist/
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.pdb
+*.log
+*.dmp
+*.tmp
+.env
+.env.*
+identity.key
+settings.ini
+self-test.txt
+startup-error.txt
+ui-error.txt
+
+# The versioned native/engine.zip is a deliberate, checksum-pinned dependency.

@@ -1,0 +1,35 @@
+name: Ошибка или проблема с подключением
+description: Сообщить о проблеме в AirMirror
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что произошло?
+      description: Опишите ожидаемое поведение и то, что происходит вместо него.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      description: Перечислите шаги от запуска приложения до ошибки.
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Версия AirMirror
+      placeholder: 1.5.1 WinUI 3
+  - type: input
+    id: windows
+    attributes:
+      label: Версия Windows и видеокарта
+  - type: input
+    id: iphone
+    attributes:
+      label: Модель iPhone и версия iOS
+  - type: textarea
+    id: settings
+    attributes:
+      label: Настройки передачи
+      description: Разрешение, 30/60 FPS, режим просмотра, видеокарта и синхронизация.

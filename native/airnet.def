@@ -1,0 +1,36 @@
+LIBRARY airnet
+EXPORTS
+  __WSAFDIsSet=WS2_32.__WSAFDIsSet @151
+  freeaddrinfo=WS2_32.freeaddrinfo @191
+  getaddrinfo=WS2_32.getaddrinfo @192
+  sendto=WS2_32.sendto @20
+  accept=am_accept @1
+  htonl=WS2_32.htonl @8
+  ioctlsocket=WS2_32.ioctlsocket @10
+  ntohs=WS2_32.ntohs @15
+  listen=WS2_32.listen @13
+  inet_ntop=WS2_32.inet_ntop @194
+  inet_pton=WS2_32.inet_pton @195
+  WSAGetLastError=WS2_32.WSAGetLastError @111
+  WSACleanup=WS2_32.WSACleanup @116
+  closesocket=am_closesocket @3
+  getsockopt=WS2_32.getsockopt @7
+  shutdown=WS2_32.shutdown @22
+  bind=WS2_32.bind @2
+  WSAStartup=WS2_32.WSAStartup @115
+  socket=WS2_32.socket @23
+  setsockopt=WS2_32.setsockopt @21
+  send=WS2_32.send @19
+  select=WS2_32.select @18
+  recv=am_recv @16
+  htons=WS2_32.htons @9
+  getsockname=WS2_32.getsockname @6
+  connect=WS2_32.connect @4
+  recvfrom=WS2_32.recvfrom @17
+  AirNetSelfTest=am_self_test @2000
+  AirNetGetStats=am_stats @2001
+  AM_PushFrame @2002
+  AM_ClearFrames @2003
+  AM_StopFrames @2004
+  AM_DestroyFrames @2005
+  AirVideoSelfTest @2006

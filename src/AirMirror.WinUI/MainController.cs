@@ -34,10 +34,11 @@ internal sealed partial class MainController {
     readonly TrayIcon tray;
     readonly RecoveryPolicy recovery=new();
     Receiver receiver;
+    Task receiverStopped=Task.CompletedTask;
     Preferences preferences;
     IntPtr videoHost;
     string failure;
-    bool busy,closing,allowClose,connected,layoutQueued,testsStarted,loaded,verifyingLayout;
+    bool busy,closing,allowClose,connected,layoutQueued,testsStarted,loaded,verifyingLayout,nativeSearchConfigured;
     int appliedOrientation;
     FrameSize lastFrame;
     long receiverStartedAt,automaticResizeUntil;
@@ -51,7 +52,7 @@ internal sealed partial class MainController {
 
     internal MainController(MirrorApp application) {
         app=application;
-        Window=new Window { Title="AirMirror 1.5.1" };
+        Window=new Window { Title="AirMirror 1.5.2" };
         Handle=WindowNative.GetWindowHandle(Window);
         Directory.CreateDirectory(Paths.Root);
         iconPath=Path.Combine(Paths.Root,"AirMirror.ico");
@@ -151,13 +152,16 @@ internal sealed partial class MainController {
         busy=true;settings.IsEnabled=restart.IsEnabled=false;
         if(!automatic)recovery.Reset();
         try {
-            if(receiver!=null){await receiver.Stop();receiver=null;}
+            var previous=receiver;receiver=null;
+            if(previous!=null)receiverStopped=previous.Stop();
+            await receiverStopped;
+            if(closing)return;
             connected=false;lastFrame=null;appliedOrientation=0;failure=null;
             Native.ShowWindow(videoHost,0);welcome.Visibility=Visibility.Visible;region.Background=null;footer.Background=null;
             RestoreWelcomeBounds();Status("Запускаем приёмник…");
             await Task.Run(Paths.Extract);
             if(closing)return;
-            Native.SetDefaultDllDirectories(0x1000);Native.AddDllDirectory(Paths.Engine);
+            if(!nativeSearchConfigured){Native.SetDefaultDllDirectories(0x1000);Native.AddDllDirectory(Paths.Engine);nativeSearchConfigured=true;}
             preferences=Preferences.Load();preferences.Save();
             receiverName.Text=preferences.Name;select.Text="Выберите «"+preferences.Name+"» — изображение появится здесь.";
             receiver=new Receiver();var current=receiver;
@@ -168,10 +172,11 @@ internal sealed partial class MainController {
             };
             receiver.Start(preferences,Program.SelfTest);receiverStartedAt=Stopwatch.GetTimestamp();
         } catch(Exception ex) {
+            if(closing)return;
             failure=ex.Message;Status("Не удалось запустить приёмник",true);
             if(Program.SelfTest){File.WriteAllText(Paths.Report,"FAIL\n"+ex);Environment.ExitCode=1;_=Shutdown();}
             else await Ui.Message(root.XamlRoot,"Не удалось запустить приёмник",ex.Message);
-        } finally {busy=false;settings.IsEnabled=restart.IsEnabled=true;}
+        } finally {busy=false;if(!closing)settings.IsEnabled=restart.IsEnabled=true;}
     }
     void Poll() {
         UpdateControls();
@@ -251,7 +256,9 @@ internal sealed partial class MainController {
     internal async Task Shutdown() {
         if(closing)return;closing=true;timer.Stop();tray.Dispose();CloseControls();
         if(settingsWindow!=null)settingsWindow.Close();
-        if(receiver!=null){try{await receiver.Stop();}catch{receiver.Dispose();}receiver=null;}
+        var previous=receiver;receiver=null;
+        try {if(previous!=null)receiverStopped=previous.Stop();await receiverStopped;}
+        catch {previous?.Dispose();}
         hook.Dispose();Native.DestroyWindow(videoHost);videoHost=IntPtr.Zero;
         allowClose=true;Window.Close();app.Finish();
     }

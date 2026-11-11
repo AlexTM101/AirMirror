@@ -72,7 +72,7 @@ internal sealed class TrayIcon : IDisposable {
         icon=Native.LoadImage(IntPtr.Zero,iconPath,1,32,32,0x10);
         if (icon==IntPtr.Zero) throw new InvalidOperationException("Tray icon unavailable");
         data=new Native.NotifyData { Size=(uint)Marshal.SizeOf<Native.NotifyData>(),Window=handle,Id=1,Flags=7,
-            Callback=CallbackMessage,Icon=icon,Tip="AirMirror 1.5.1",Info="",InfoTitle="" };
+            Callback=CallbackMessage,Icon=icon,Tip="AirMirror 1.5.2",Info="",InfoTitle="" };
         Add();
     }
     internal void Add() { if (!disposed) Registered=Native.Shell_NotifyIcon(0,ref data); }

@@ -2,19 +2,16 @@
 $ErrorActionPreference='Stop'
 $project=$PSScriptRoot
 $workspace=Split-Path $project -Parent
+. (Join-Path $workspace 'scripts\Download.ps1')
 $upstream=Join-Path $workspace 'work\upstream'
-$bundle=Join-Path $workspace 'work\bundle'
+$buildRoot=Join-Path $workspace ('work\native-build-' + [Guid]::NewGuid().ToString('N'))
+$bundle=Join-Path $buildRoot 'bundle'
 New-Item -ItemType Directory -Force -Path $bundle | Out-Null
 # Download only the pinned official release; validate before extracting/running.
 $releaseZip = Join-Path $upstream 'engine.zip'
 $expected = '5f1792a96efffe84b220edfa7286fa7670806226aa4d0b4b6c7e33ddd7747bf9'
-if (-not (Test-Path -LiteralPath $releaseZip)) {
-    New-Item -ItemType Directory -Force -Path $upstream | Out-Null
-    Invoke-WebRequest 'https://github.com/moieric11/AirPlay-Windows/releases/download/v0.4.1/airplay-windows-v0.4.1-x64.zip' -OutFile $releaseZip
-}
-if ((Get-FileHash -LiteralPath $releaseZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Upstream checksum mismatch' }
-Expand-Archive -LiteralPath $releaseZip -DestinationPath (Join-Path $upstream 'engine') -Force
-Copy-Item -Path (Join-Path $upstream 'engine\*') -Destination $bundle -Recurse -Force
+Get-VerifiedDownload -Urls 'https://github.com/moieric11/AirPlay-Windows/releases/download/v0.4.1/airplay-windows-v0.4.1-x64.zip' -Destination $releaseZip -ExpectedHash $expected
+Expand-Archive -LiteralPath $releaseZip -DestinationPath $bundle
 
 # Isolate settings, activation event and mutex from the original application.
 # These equal-length UTF-16 substitutions preserve all PE offsets and all code.
@@ -51,12 +48,9 @@ Copy-Item -LiteralPath (Join-Path $zigRoot 'LICENSE') -Destination (Join-Path $r
 Copy-Item -LiteralPath (Join-Path $zigRoot 'lib\libc\mingw\COPYING') -Destination (Join-Path $runtimeLicenses 'MinGW-w64-COPYING.txt') -Force
 Copy-Item -LiteralPath (Join-Path $zigRoot 'lib\libunwind\LICENSE.TXT') -Destination (Join-Path $runtimeLicenses 'LLVM-LICENSE.txt') -Force
 
-# App-local Microsoft VC runtime. No administrator install is needed.
-$runtimeNames = @('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','msvcp140_atomic_wait.dll','msvcp140_codecvt_ids.dll','concrt140.dll')
-foreach ($name in $runtimeNames) {
-    $dll = Join-Path $env:WINDIR "System32\$name"
-    if (Test-Path -LiteralPath $dll) { Copy-Item -LiteralPath $dll -Destination $bundle -Force }
-}
+# App-local Microsoft VC runtime from the checksum-pinned official VS archive.
+# The host's installed runtime never affects the distributed payload.
+& (Join-Path $project 'Get-VcRuntime.ps1') -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $project 'THIRD_PARTY.md') -Destination $bundle -Force
 $packed = Join-Path $project 'engine.zip'
 Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $packed -CompressionLevel Optimal -Force

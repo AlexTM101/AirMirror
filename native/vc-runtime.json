@@ -1,0 +1,11 @@
+{
+  "package": "Microsoft.VC.14.44.17.14.CRT.Redist.X64.base",
+  "version": "14.44.35211",
+  "url": "https://download.visualstudio.microsoft.com/download/pr/45d3b8dd-bced-4b37-9974-142f748d710c/4aaf54db0bfc9435f7c3660e1a00237a4b556042bfeea64bde44c2e0194e6ee5/Microsoft.VC.14.44.17.14.CRT.Redist.X64.base.vsix",
+  "sha256": "4aaf54db0bfc9435f7c3660e1a00237a4b556042bfeea64bde44c2e0194e6ee5",
+  "sourceCatalog": "https://download.visualstudio.microsoft.com/download/pr/95995f57-8355-4ff5-8d90-a7e1669fb3b3/da49c304df0fff4e75c20849171840a06840e845ce814104d709dfb5cd461668/VisualStudio.vsman",
+  "sourceCatalogSha256": "da49c304df0fff4e75c20849171840a06840e845ce814104d709dfb5cd461668",
+  "licensePage": "https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/",
+  "licenseUrl": "https://visualstudio.microsoft.com/wp-content/uploads/2021/09/Visual-C-Runtime-2015-2022-License-1.docx",
+  "licenseSha256": "f1e3d56ceb2ad68aae0711b910375009e651ac5530fa0760f0dea6e81e54fae1"
+}

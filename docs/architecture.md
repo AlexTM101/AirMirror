@@ -1,4 +1,4 @@
-# AirMirror 1.5.1 — WinUI 3
+# AirMirror 1.5.2 — WinUI 3
 
 GPL-3.0 Windows 11 x64 AirPlay receiver. The interface and settings use
 Microsoft.UI.Xaml / WinUI 3, with no WPF or Windows Forms reference in the new
@@ -21,7 +21,7 @@ NuGet restores pinned Windows App SDK 1.8.260921001 and Windows SDK BuildTools
 is required. Build tools require Internet only when first downloading packages.
 For development, build.ps1 -BuildOnly creates an ordinary output folder.
 
-The normal publish output is dist/AirMirror-1.5.1-WinUI3.exe, a compressed
+The normal publish output is dist/AirMirror-1.5.2-WinUI3.exe, a compressed
 self-contained executable, including .NET and the Windows App SDK. It works
 without a separately installed .NET or Windows App SDK runtime. Components are
 extracted on launch; this is a single distribution file, not zero-extraction.
@@ -60,6 +60,8 @@ AirMirror.WinUI.exe --self-test checks actual startup and mDNS registration,
 native child attachment, real native transport/decoded-frame queue tests,
 actual WinUI portrait/landscape resizing and matching child bounds, tray
 restoration from normal/maximized states, and physical fullscreen restoration.
+This includes moving the normal window before maximizing, leaving fullscreen
+back to its saved bounds, and checking the actual floating controls window.
 The same RTSP SETUP/TEARDOWN smoke fixture passes synthetic frames through the
 real renderer. It is enabled only in the self-test child.
 
@@ -67,6 +69,13 @@ real renderer. It is enabled only in the self-test child.
 recovery and checks that identity is preserved. AIRMIRROR_DATA_DIR redirects
 cache/logs for testing; native preferences retain the existing dedicated
 roaming AirMirror-Local namespace. Do not run either test during a real session.
+tests/Run-Integration.ps1 preserves the roaming preference files around a run.
+
+tests/Run-Engine.ps1 checks the real backend without WinUI: same-size reconnect,
+concurrent stop/dispose, verified bundle extraction and damaged cache repair
+without changing identity. It forces fresh builds when switching its intentional
+bad-hash fixture. Native regression probes additionally exercise a real 200 ms
+Winsock timeout, resumed bytes and EOF while tracking the MMCSS lifetime.
 
 Interactive verification also observed a real iPhone portrait stream and
 fullscreen display. Sustained frame pacing and audio quality are not measured

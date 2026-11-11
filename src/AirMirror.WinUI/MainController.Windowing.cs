@@ -34,16 +34,19 @@ internal sealed partial class MainController {
             if(notification==0x205||notification==0x7b)ShowMenu(true);
             return IntPtr.Zero;
         }
-        if(message==5){
-            if((int)wparam==1){Window.DispatcherQueue.TryEnqueue(HideToTray);}
+        if(message==3||message==5){
+            if(message==5&&(int)wparam==1){Window.DispatcherQueue.TryEnqueue(HideToTray);}
             else if(!hidden&&!full){
-                wasMaximized=(int)wparam==2;
-                if(!wasMaximized){Native.GetWindowRect(Handle,out var bounds);normalBounds=new RectInt32(bounds.Left,bounds.Top,bounds.Right-bounds.Left,bounds.Bottom-bounds.Top);}
+                wasMaximized=Native.IsZoomed(Handle);
+                if(!wasMaximized&&!Native.IsIconic(Handle)&&Native.GetWindowRect(Handle,out var bounds))
+                    normalBounds=new RectInt32(bounds.Left,bounds.Top,bounds.Right-bounds.Left,bounds.Bottom-bounds.Top);
             }
         }
         if(message==0x24&&!full){
             var limits=Marshal.PtrToStructure<Native.MINMAXINFO>(lparam);
-            limits.MinTrackSize.X=(int)((connected?360:780)*Scale);limits.MinTrackSize.Y=(int)((connected?420:650)*Scale);
+            var work=MonitorInfo().Work;double scale=Scale;
+            limits.MinTrackSize.X=Math.Min((int)((connected?360:780)*scale),Math.Max(1,work.Right-work.Left));
+            limits.MinTrackSize.Y=Math.Min((int)((connected?420:650)*scale),Math.Max(1,work.Bottom-work.Top));
             Marshal.StructureToPtr(limits,lparam,false);return IntPtr.Zero;
         }
         if(message==0x2e0||message==0x7e){appliedOrientation=0;QueueLayout();if(full)Window.DispatcherQueue.TryEnqueue(PlaceControls);}
@@ -90,7 +93,7 @@ internal sealed partial class MainController {
         if(!full){
             beforeFullscreen=CurrentNormalBounds();maximizedBeforeFullscreen=Native.IsZoomed(Handle);full=true;
             Window.AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);footerRow.Height=new GridLength(0);footer.Visibility=Visibility.Collapsed;
-            if(!Program.SelfTest)EnsureControls();RevealControls();
+            EnsureControls();RevealControls();
         } else {
             full=false;HideControls();Window.AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
             Window.AppWindow.MoveAndResize(beforeFullscreen);
@@ -142,22 +145,48 @@ internal sealed partial class MainController {
     }
     void CloseControls() {SetCursorHidden(false);if(controlsWindow!=null){controlsWindow.Close();controlsWindow=null;controlsHandle=IntPtr.Zero;}}
 
-    internal async Task<bool> VerifyWindowing() {
+    internal async Task<bool> VerifyWindowing(Action<string> record) {
         int pid=receiver.Process.Id;
         var original=CurrentNormalBounds();bool ok=tray.Registered;
+        IntPtr limitsPointer=Marshal.AllocHGlobal(Marshal.SizeOf<Native.MINMAXINFO>());
+        try {
+            Marshal.StructureToPtr(new Native.MINMAXINFO(),limitsPointer,false);
+            ObserveWindow(0x24,IntPtr.Zero,limitsPointer);
+            var limits=Marshal.PtrToStructure<Native.MINMAXINFO>(limitsPointer);var work=MonitorInfo().Work;
+            bool fits=limits.MinTrackSize.X>0&&limits.MinTrackSize.Y>0&&limits.MinTrackSize.X<=work.Right-work.Left&&limits.MinTrackSize.Y<=work.Bottom-work.Top;
+            record("Minimum tracking size fits current work area: "+fits+" ("+limits.MinTrackSize.X+"x"+limits.MinTrackSize.Y+")");ok&=fits;
+        } finally {Marshal.FreeHGlobal(limitsPointer);}
         foreach(bool maximize in new[]{false,true}){
             if(maximize)((OverlappedPresenter)Window.AppWindow.Presenter).Maximize();
             else ((OverlappedPresenter)Window.AppWindow.Presenter).Restore();
             await Task.Delay(120);Minimize();await Task.Delay(150);
-            ok&=hidden&&!Native.IsWindowVisible(Handle)&&!Window.AppWindow.IsShownInSwitchers;
+            bool minimized=hidden&&!Native.IsWindowVisible(Handle)&&!Window.AppWindow.IsShownInSwitchers;
             Restore();await Task.Delay(150);
-            ok&=!hidden&&Native.IsWindowVisible(Handle)&&Window.AppWindow.IsShownInSwitchers&&Native.IsZoomed(Handle)==maximize&&VideoAttached&&receiver.Process.Id==pid&&!receiver.Exited;
+            bool restored=minimized&&!hidden&&Native.IsWindowVisible(Handle)&&Window.AppWindow.IsShownInSwitchers&&Native.IsZoomed(Handle)==maximize&&VideoAttached&&receiver.Process.Id==pid&&!receiver.Exited;
+            record("Tray restore from "+(maximize?"maximized":"normal")+": "+restored);ok&=restored;
         }
         ((OverlappedPresenter)Window.AppWindow.Presenter).Restore();Window.AppWindow.MoveAndResize(original);await Task.Delay(100);
-        ToggleFull();await Task.Delay(150);Native.GetWindowRect(Handle,out var fullBounds);var monitor=MonitorInfo().Monitor;
-        ok&=full&&footer.Visibility==Visibility.Collapsed&&fullBounds.Left==monitor.Left&&fullBounds.Top==monitor.Top&&fullBounds.Right==monitor.Right&&fullBounds.Bottom==monitor.Bottom;
-        ToggleFull();await Task.Delay(150);Native.GetWindowRect(Handle,out var restored);
-        ok&=!full&&footer.Visibility==Visibility.Visible&&Math.Abs(restored.Left-original.X)<=2&&Math.Abs(restored.Top-original.Y)<=2&&Math.Abs(restored.Right-restored.Left-original.Width)<=2&&Math.Abs(restored.Bottom-restored.Top-original.Height)<=2;
+        // A pure move must update the rectangle retained when maximizing, too.
+        var moved=new RectInt32(original.X+24,original.Y+16,original.Width,original.Height);
+        Window.AppWindow.Move(new PointInt32(moved.X,moved.Y));await Task.Delay(100);
+        foreach(bool maximize in new[]{true,false}) {
+            if(maximize)((OverlappedPresenter)Window.AppWindow.Presenter).Maximize();
+            await Task.Delay(100);ToggleFull();await Task.Delay(150);
+            Native.GetWindowRect(Handle,out var fullBounds);var monitor=MonitorInfo().Monitor;
+            bool fillsMonitor=full&&footer.Visibility==Visibility.Collapsed&&fullBounds.Left==monitor.Left&&fullBounds.Top==monitor.Top&&fullBounds.Right==monitor.Right&&fullBounds.Bottom==monitor.Bottom;
+            record("Fullscreen fills monitor from "+(maximize?"maximized":"normal")+": "+fillsMonitor);ok&=fillsMonitor;
+            RevealControls();
+            Native.GetWindowRect(controlsHandle,out var controlsBounds);
+            bool toolbar=controlsWindow!=null&&Native.IsWindowVisible(controlsHandle)&&controlsBounds.Left>=monitor.Left&&controlsBounds.Top>=monitor.Top&&controlsBounds.Right<=monitor.Right&&controlsBounds.Bottom<=monitor.Bottom;
+            record("Floating fullscreen toolbar visible within monitor: "+toolbar);ok&=toolbar;
+            ToggleFull();await Task.Delay(150);
+            bool presentation=!full&&footer.Visibility==Visibility.Visible&&Native.IsZoomed(Handle)==maximize;
+            if(maximize){((OverlappedPresenter)Window.AppWindow.Presenter).Restore();await Task.Delay(100);}
+            Native.GetWindowRect(Handle,out var restored);
+            bool normalRestored=presentation&&Math.Abs(restored.Left-moved.X)<=2&&Math.Abs(restored.Top-moved.Y)<=2&&Math.Abs(restored.Right-restored.Left-moved.Width)<=2&&Math.Abs(restored.Bottom-restored.Top-moved.Height)<=2;
+            record("Moved normal bounds preserved through "+(maximize?"maximized":"normal")+" fullscreen: "+normalRestored);ok&=normalRestored;
+        }
+        Window.AppWindow.MoveAndResize(original);await Task.Delay(100);
         return ok;
     }
     internal async Task<bool> VerifyOrientation() {

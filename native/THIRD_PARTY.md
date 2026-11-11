@@ -58,9 +58,15 @@ Microsoft scheduling and socket policy references:
 https://learn.microsoft.com/en-us/windows/win32/procthread/multimedia-class-scheduler-service
 https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.SIO_TCP_SET_ACK_FREQUENCY.html
 
-Microsoft Visual C++ runtime DLLs are bundled app-locally from the development
-PC. They remain copyright Microsoft Corporation, are not covered by the GPL,
-and retain Microsoft's redistribution terms.
+Microsoft Visual C++ runtime 14.44.35211 DLLs are bundled app-locally from the
+official Microsoft.VC.14.44.17.14.CRT.Redist.X64.base Visual Studio distribution.
+The archive URL, Microsoft's catalog SHA-256 and source catalog are pinned in
+vc-runtime.json. Only release x64 CRT DLLs are extracted; no runtime installer
+is run and no DLL is taken from the development PC. They remain copyright
+Microsoft Corporation and are not covered by the GPL. Microsoft's original
+runtime license is preserved in licenses/Microsoft-VC-Runtime-LICENSE.docx and
+copied with provenance into airnet-licenses in the native payload.
+https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/
 https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
 
 Apple, iPhone, AirPlay and macOS are Apple Inc. trademarks. AirMirror is an

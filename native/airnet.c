@@ -79,7 +79,10 @@ int WSAAPI am_recv(SOCKET socket, char *buffer, int length, int flags) {
     }
     int result = recv(socket,buffer,length,flags);
     int previous_error = WSAGetLastError();
-    if (result <= 0) release_playback(socket);
+    /* MirrorListener retries its short receive timeout while keeping the same
+     * connection. Keep scheduling scoped to that live connection as well. */
+    if (result == 0 || (result == SOCKET_ERROR && previous_error != WSAETIMEDOUT && previous_error != WSAEWOULDBLOCK))
+        release_playback(socket);
     WSASetLastError(previous_error);
     return result;
 }

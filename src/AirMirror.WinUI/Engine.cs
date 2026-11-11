@@ -30,25 +30,47 @@ namespace AirMirror {
         internal static string PlaybackMode { get { return System.IO.Path.Combine(Root, "playback-mode.txt"); } }
 
         internal static void Extract() {
-            Directory.CreateDirectory(Root);
             string marker = System.IO.Path.Combine(Engine, "bundle.sha256");
             var asm = Assembly.GetExecutingAssembly();
             string expected;
             using (var reader = new StreamReader(asm.GetManifestResourceStream("engine.sha256"))) expected = reader.ReadToEnd().Trim();
-            if (File.Exists(marker) && File.ReadAllText(marker) == expected && File.Exists(EngineExe)) return;
-            Directory.CreateDirectory(Engine);
             using (var stream = asm.GetManifestResourceStream("engine.zip"))
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Read)) {
-                foreach (var entry in zip.Entries) {
-                    string target = System.IO.Path.GetFullPath(System.IO.Path.Combine(Engine, entry.FullName));
-                    if (!target.StartsWith(System.IO.Path.GetFullPath(Engine) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidDataException("Unsafe bundle entry");
-                    if (String.IsNullOrEmpty(entry.Name)) { Directory.CreateDirectory(target); continue; }
-                    Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target));
-                    using (var src = entry.Open()) using (var dst = File.Create(target)) src.CopyTo(dst);
+            {
+                if (stream == null || !String.Equals(Convert.ToHexString(SHA256.HashData(stream)), expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Native payload checksum mismatch");
+                stream.Position = 0;
+                using (var zip = new ZipArchive(stream, ZipArchiveMode.Read)) {
+                    var repairs = new List<KeyValuePair<ZipArchiveEntry,string>>();
+                    string prefix = System.IO.Path.GetFullPath(Engine) + System.IO.Path.DirectorySeparatorChar;
+                    foreach (var entry in zip.Entries) {
+                        string target = System.IO.Path.GetFullPath(System.IO.Path.Combine(Engine, entry.FullName));
+                        if (!target.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unsafe bundle entry");
+                        if (!String.IsNullOrEmpty(entry.Name) && !CacheMatches(entry,target))
+                            repairs.Add(new KeyValuePair<ZipArchiveEntry,string>(entry,target));
+                    }
+                    if (repairs.Count == 0 && File.Exists(marker) && File.ReadAllText(marker) == expected) return;
+                    Directory.CreateDirectory(Engine);
+                    // A partially repaired cache must never retain a success marker.
+                    File.Delete(marker);
+                    foreach (var repair in repairs) {
+                        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(repair.Value));
+                        string temporary = repair.Value + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                        try {
+                            using (var src = repair.Key.Open()) using (var dst = File.Create(temporary)) src.CopyTo(dst);
+                            File.Move(temporary,repair.Value,true);
+                        } finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                    }
+                    // Repair only bundled files. Pairing identity and other runtime files survive.
+                    File.WriteAllText(marker, expected);
                 }
             }
-            File.WriteAllText(marker, expected);
+        }
+        private static bool CacheMatches(ZipArchiveEntry entry,string target) {
+            try {
+                if (!File.Exists(target) || new FileInfo(target).Length != entry.Length) return false;
+                using (var source = entry.Open()) using (var cached = File.OpenRead(target))
+                    return SHA256.HashData(source).SequenceEqual(SHA256.HashData(cached));
+            } catch (IOException) { return false; } catch (UnauthorizedAccessException) { return false; }
         }
     }
 
@@ -187,10 +209,13 @@ namespace AirMirror {
         private readonly BlockingCollection<string> logQueue = new BlockingCollection<string>(2048);
         private Task logTask;
         private volatile bool logClosed;
+        private readonly object lifetime = new object();
+        private Task stopTask;
+        private bool disposed;
         internal void Start(Preferences preferences,bool smokeTest = false) {
             Directory.CreateDirectory(Paths.Root);
             logTask = Task.Factory.StartNew(WriteLog, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            logQueue.TryAdd("AirMirror 1.5.1 receiver " + DateTime.Now.ToString("s"));
+            logQueue.TryAdd("AirMirror 1.5.2 receiver " + DateTime.Now.ToString("s"));
             Process = new Process();
             Process.StartInfo = new ProcessStartInfo(Paths.EngineExe, "--log") {
                 UseShellExecute = false, CreateNoWindow = true,
@@ -222,11 +247,13 @@ namespace AirMirror {
             if (text.Contains("AirVideo: native renderer smoke complete")) VideoSmokeSeen = true;
             if (text.Contains("mDNS register:") && text.Contains("_airplay._tcp") && text.Contains("status=0")) Discovery = true;
             if (text.Contains("decoded first frame:") || text.Contains("VideoRenderer texture (")) HasFrame = true;
-            if (text.Contains("VideoRenderer texture (")) {
-                NativeFrameSeen = true;
-                int marker = text.LastIndexOf(" created ",StringComparison.Ordinal);
-                if (marker >= 0) {
-                    string[] dimensions = text.Substring(marker+9).Trim().Split('x');
+            bool texture = text.Contains("VideoRenderer texture (");
+            if (texture) NativeFrameSeen = true;
+            if (texture || text.Contains("decoded first frame:")) {
+                string marker = texture ? " created " : "decoded first frame: ";
+                int offset = text.LastIndexOf(marker,StringComparison.Ordinal);
+                if (offset >= 0) {
+                    string[] dimensions = text.Substring(offset+marker.Length).Trim().Split('x');
                     int width, height;
                     if (dimensions.Length == 2 && int.TryParse(dimensions[0],out width) && int.TryParse(dimensions[1],out height) &&
                         width > 0 && height > 0 && width <= 8192 && height <= 8192) Frame = new FrameSize(width,height);
@@ -273,21 +300,47 @@ namespace AirMirror {
             }
         }
         internal bool Exited { get { try { return Process == null || Process.HasExited; } catch { return true; } } }
-        internal async Task Stop() {
-            Stopping = true;
-            if (Process != null && !Exited) {
-                if (Window != IntPtr.Zero) Native.PostMessage(Window, 0x0010, IntPtr.Zero, IntPtr.Zero);
-                await Task.Run(delegate { if (!Process.WaitForExit(5000)) { try { Process.Kill(); Process.WaitForExit(2000); } catch (InvalidOperationException) { } } });
+        internal Task Stop() {
+            lock (lifetime) {
+                if (stopTask != null) return stopTask;
+                Stopping = true;
+                if (disposed) return stopTask = Task.CompletedTask;
+                var current = Process;
+                var window = Window;
+                return stopTask = Task.Run(delegate {
+                    try {
+                        if (current != null && !current.HasExited) {
+                            if (window != IntPtr.Zero) Native.PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero);
+                            if (!current.WaitForExit(5000)) { current.Kill(); current.WaitForExit(2000); }
+                        }
+                    } catch (InvalidOperationException) { }
+                    finally { FinishDispose(); }
+                });
             }
-            Dispose();
         }
         public void Dispose() {
-            if (job != IntPtr.Zero) { Native.CloseHandle(job); job = IntPtr.Zero; }
-            if (Process != null) { Process.Dispose(); Process = null; }
-            if (!logClosed) {
-                logClosed = true; logQueue.CompleteAdding();
-                if (logTask != null) { try { logTask.Wait(750); } catch (AggregateException) { } }
+            lock (lifetime) {
+                if (disposed) return;
+                if (stopTask != null && !stopTask.IsCompleted) {
+                    // Terminate the job if necessary, but keep the captured Process
+                    // usable until the shared stop operation has finished waiting.
+                    if (job != IntPtr.Zero) { Native.CloseHandle(job); job = IntPtr.Zero; }
+                    return;
+                }
+                FinishDispose();
             }
+        }
+        private void FinishDispose() {
+            Task writer;
+            lock (lifetime) {
+                if (disposed) return;
+                disposed = true;
+                if (job != IntPtr.Zero) { Native.CloseHandle(job); job = IntPtr.Zero; }
+                if (Process != null) { Process.Dispose(); Process = null; }
+                logClosed = true; logQueue.CompleteAdding();
+                writer = logTask;
+            }
+            if (writer != null) { try { writer.Wait(750); } catch (AggregateException) { } }
         }
     }
 

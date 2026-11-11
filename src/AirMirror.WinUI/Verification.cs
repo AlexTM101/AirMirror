@@ -10,7 +10,7 @@ using Windows.Foundation;
 namespace AirMirror;
 internal static class Verification {
     internal static async Task Run(MainController owner) {
-        var text=new StringBuilder("AirMirror 1.5.1 | WinUI 3 | "+DateTime.Now.ToString("s")+"\n");
+        var text=new StringBuilder("AirMirror 1.5.2 | WinUI 3 | "+DateTime.Now.ToString("s")+"\n");
         bool ok=true;
         if(Program.RecoveryTest) {
             var previous=owner.Receiver;
@@ -32,7 +32,7 @@ internal static class Verification {
         bool ready=receiver!=null && receiver.Ready && receiver.Discovery && !receiver.Exited && owner.VideoAttached;
         text.AppendLine("Native startup, AirPlay discovery and child HWND attachment: "+ready);ok &= ready;
         if(!ready)throw new InvalidOperationException(text.ToString());
-        bool windowing=await owner.VerifyWindowing();
+        bool windowing=await owner.VerifyWindowing(line=>text.AppendLine(line));
         text.AppendLine("Tray normal/maximized restore, receiver continuity, full monitor bounds and restore: "+windowing);ok &= windowing;
         bool orientation=await owner.VerifyOrientation();
         text.AppendLine("Actual WinUI portrait/landscape resize and matching native video bounds: "+orientation);ok &= orientation;

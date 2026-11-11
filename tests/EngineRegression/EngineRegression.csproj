@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EngineHashFile Condition="'$(EngineHashFile)' == ''">../../native/engine.sha256</EngineHashFile>
+    <EngineSourceFile Condition="'$(EngineSourceFile)' == ''">../../src/AirMirror.WinUI/Engine.cs</EngineSourceFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(EngineSourceFile)" Link="Engine.cs" />
+    <EmbeddedResource Include="../../native/engine.zip" LogicalName="engine.zip" />
+    <EmbeddedResource Include="$(EngineHashFile)" LogicalName="engine.sha256" />
+  </ItemGroup>
+</Project>

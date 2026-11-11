@@ -13,7 +13,7 @@ internal sealed partial class MainController {
     internal async Task Settings() {
         if(closing||busy||preferences==null)return;
         if(settingsWindow!=null){settingsWindow.Activate();return;}
-        var dialog=new Window { Title="Настройки AirMirror 1.5.1" };settingsWindow=dialog;
+        var dialog=new Window { Title="Настройки AirMirror 1.5.2" };settingsWindow=dialog;
         var handle=WinRT.Interop.WindowNative.GetWindowHandle(dialog);Native.SetWindowLongPtr(handle,-8,Handle);
         dialog.AppWindow.IsShownInSwitchers=false;dialog.AppWindow.SetIcon(iconPath);
         var presenter=(OverlappedPresenter)dialog.AppWindow.Presenter;
@@ -56,9 +56,10 @@ internal sealed partial class MainController {
             try {
                 using var helper=Process.Start(new ProcessStartInfo(Paths.EngineExe,"--configure-firewall") { UseShellExecute=true,Verb="runas",WorkingDirectory=Paths.Engine });
                 await helper.WaitForExitAsync();
-                await Ui.Message(panel.XamlRoot,"Подключение AirPlay",helper.ExitCode==0?"Доступ к локальной сети разрешён. Откройте «Повтор экрана» на iPhone заново.":"Проверьте доступ AirMirror в брандмауэре Windows.");
+                if(!closing&&settingsWindow==dialog&&panel.XamlRoot!=null)
+                    await Ui.Message(panel.XamlRoot,"Подключение AirPlay",helper.ExitCode==0?"Доступ к локальной сети разрешён. Откройте «Повтор экрана» на iPhone заново.":"Проверьте доступ AirMirror в брандмауэре Windows.");
             } catch(System.ComponentModel.Win32Exception) { }
-            finally {firewall.IsEnabled=true;}
+            finally {if(!closing&&settingsWindow==dialog)firewall.IsEnabled=true;}
         };
         dialog.Closed+=(_,_)=>{settingsWindow=null;done.TrySetResult(false);Native.EnableWindow(Handle,true);if(!closing)Window.Activate();};
         var work=MonitorInfo().Work;double scale=Scale;

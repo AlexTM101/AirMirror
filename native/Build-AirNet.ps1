@@ -29,7 +29,8 @@ $defPath = Join-Path $PSScriptRoot 'airnet.def'
 [IO.File]::WriteAllLines($defPath,$definitions,[Text.Encoding]::ASCII)
 $env:ZIG_GLOBAL_CACHE_DIR = Join-Path $workspace 'work\tools\zig-global-cache'
 $env:ZIG_LOCAL_CACHE_DIR = Join-Path $workspace 'work\tools\zig-local-cache'
-& $compiler cc -target x86_64-windows-gnu -std=c11 -O2 -Wall -Wextra -Werror -shared (Join-Path $PSScriptRoot 'airnet.c') (Join-Path $PSScriptRoot 'airvideo.c') $defPath -lws2_32 -lavrt -o $Destination
+# Distribution DLLs must not contain source paths or generate private PDBs.
+& $compiler cc -target x86_64-windows-gnu -std=c11 -O2 -g0 -s -Wall -Wextra -Werror -shared (Join-Path $PSScriptRoot 'airnet.c') (Join-Path $PSScriptRoot 'airvideo.c') $defPath -lws2_32 -lavrt -o $Destination
 if ($LASTEXITCODE -ne 0) { throw 'AirNet build failed' }
 $exports = @(Get-PeExports (Read-PeImage $Destination))
 foreach ($import in $imports) {

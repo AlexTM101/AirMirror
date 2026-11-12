@@ -52,8 +52,15 @@ Copy-Item -LiteralPath (Join-Path $zigRoot 'lib\libunwind\LICENSE.TXT') -Destina
 # The host's installed runtime never affects the distributed payload.
 & (Join-Path $project 'Get-VcRuntime.ps1') -Destination $bundle
 Copy-Item -LiteralPath (Join-Path $project 'THIRD_PARTY.md') -Destination $bundle -Force
+# Import libraries and linker/debug intermediates are not runtime dependencies.
+$bundlePrefix = [IO.Path]::GetFullPath($bundle) + [IO.Path]::DirectorySeparatorChar
+foreach ($artifact in Get-ChildItem -LiteralPath $bundle -File -Recurse | Where-Object { $_.Extension -in '.pdb','.lib','.obj','.ilk','.exp' }) {
+    if (-not $artifact.FullName.StartsWith($bundlePrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'Build artifact escaped the staging directory' }
+    Remove-Item -LiteralPath $artifact.FullName -Force
+}
 $packed = Join-Path $project 'engine.zip'
 Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $packed -CompressionLevel Optimal -Force
+& (Join-Path $workspace 'scripts\Test-PackagePrivacy.ps1') -Archive $packed
 $bundleHash = (Get-FileHash -LiteralPath $packed -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $project 'engine.sha256'),$bundleHash)
 

@@ -18,5 +18,16 @@ settings.ini
 self-test.txt
 startup-error.txt
 ui-error.txt
+launch-error.txt
+startup-trace.txt
+first_frame.ppm
+*.pem
+*.key
+*.pfx
+*.p12
+/engine-*/
+/frame-rate.txt
+/display-options.ini
+/playback-mode.txt
 
 # The versioned native/engine.zip is a deliberate, checksum-pinned dependency.
